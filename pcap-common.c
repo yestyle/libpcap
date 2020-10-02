@@ -1647,6 +1647,31 @@ swap_nflog_header(const struct pcap_pkthdr *hdr, u_char *buf)
 	}
 }
 
+/*
+ * The CAN ID in the DLT_CAN_SOCKETCAN header is in host byte
+ * order when capturing (the header is filled in by the kernel and provided
+ * on a PF_PACKET socket).
+ *
+ * When reading a DLT_CAN_SOCKETCAN capture file, we need to
+ * convert it from the byte order of the host that wrote the file to
+ * this host's byte order.
+ */
+static void
+swap_can_socketcan_header(const struct pcap_pkthdr *hdr, u_char *buf)
+{
+	u_int caplen = hdr->caplen;
+	u_int length = hdr->len;
+	pcap_can_socketcan_hdr *chdr = (pcap_can_socketcan_hdr *)buf;
+
+	if (caplen < (u_int) sizeof(chdr->can_id) ||
+	    length < (u_int) sizeof(chdr->can_id)) {
+		/* Not enough data to have the CAN ID */
+		return;
+	}
+
+	chdr->can_id = SWAPLONG(chdr->can_id);
+}
+
 void
 swap_pseudo_headers(int linktype, struct pcap_pkthdr *hdr, u_char *data)
 {
@@ -1671,6 +1696,10 @@ swap_pseudo_headers(int linktype, struct pcap_pkthdr *hdr, u_char *data)
 
 	case DLT_NFLOG:
 		swap_nflog_header(hdr, data);
+		break;
+
+	case DLT_CAN_SOCKETCAN:
+		swap_can_socketcan_header(hdr, data);
 		break;
 	}
 }

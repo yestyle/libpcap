@@ -93,6 +93,7 @@
 #include <netinet/in.h>
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
+#include <linux/can.h>
 #include <poll.h>
 #include <dirent.h>
 #include <sys/eventfd.h>
@@ -1859,14 +1860,7 @@ static void map_arphrd_to_dlt(pcap_t *handle, int arptype,
 #define ARPHRD_CAN 280
 #endif
 	case ARPHRD_CAN:
-		/*
-		 * Map this to DLT_LINUX_SLL; that way, CAN frames will
-		 * have ETH_P_CAN/LINUX_SLL_P_CAN as the protocol and
-		 * CAN FD frames will have ETH_P_CANFD/LINUX_SLL_P_CANFD
-		 * as the protocol, so they can be distinguished by the
-		 * protocol in the SLL header.
-		 */
-		handle->linktype = DLT_LINUX_SLL;
+		handle->linktype = DLT_CAN_SOCKETCAN;
 		break;
 
 #ifndef ARPHRD_IEEE802_TR
@@ -3749,6 +3743,7 @@ static int pcap_handle_packet_mmap(
 	unsigned char *bp;
 	struct sockaddr_ll *sll;
 	struct pcap_pkthdr pcaphdr;
+	struct can_frame *canhdr;
 	unsigned int snaplen = tp_snaplen;
 	struct utsname utsname;
 
@@ -3784,6 +3779,12 @@ static int pcap_handle_packet_mmap(
 	 * the filter when the ring became empty, but it can possibly
 	 * happen a lot later... */
 	bp = frame + tp_mac;
+
+	/* Convert CAN ID to network byte order */
+	if (handle->linktype == DLT_CAN_SOCKETCAN) {
+		canhdr = (struct can_frame *)bp;
+		canhdr->can_id = htonl(canhdr->can_id);
+	}
 
 	/* if required build in place the sll header*/
 	sll = (void *)(frame + TPACKET_ALIGN(handlep->tp_hdrlen));
